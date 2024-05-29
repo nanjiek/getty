@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ feature/dubbo-getty-v1.4.10  ]
+    branches: [ master ]
   pull_request:
-    branches: "master"
+    branches: "*"
 
 jobs:
 
