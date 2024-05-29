@@ -571,7 +571,6 @@ func (s *session) addTask(pkg interface{}) {
 			log.Errorf("[Id:%d, name=%s, endpoint=%s] Session is closed", s.ID(), s.name, s.EndPoint())
 			return
 		}
-
 		s.listener.OnMessage(s, pkg)
 		s.IncReadPkgNum()
 	}
