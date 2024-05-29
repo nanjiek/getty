@@ -49,24 +49,28 @@ type Connection interface {
 	SetCompressType(CompressType)
 	LocalAddr() string
 	RemoteAddr() string
-	incReadPkgNum()
-	incWritePkgNum()
+	// IncReadPkgNum increases connection's read pkg number
+	IncReadPkgNum()
+	// IncWritePkgNum increases connection's write pkg number
+	IncWritePkgNum()
 	// UpdateActive update session's active time
 	UpdateActive()
 	// GetActive get session's active time
 	GetActive() time.Time
-	readTimeout() time.Duration
+	// ReadTimeout gets deadline for the future read calls.
+	ReadTimeout() time.Duration
 	// SetReadTimeout sets deadline for the future read calls.
 	SetReadTimeout(time.Duration)
-	writeTimeout() time.Duration
-	// SetWriteTimeout sets deadline for the future read calls.
+	// WriteTimeout gets deadline for the future write calls.
+	WriteTimeout() time.Duration
+	// SetWriteTimeout sets deadline for the future write calls.
 	SetWriteTimeout(time.Duration)
-	send(interface{}) (int, error)
-	// don't distinguish between tcp connection and websocket connection. Because
-	// gorilla/websocket/conn.go:(Conn)Close also invoke net.Conn.Close
-	close(int)
-	// set related session
-	setSession(Session)
+	// Send pkg data to peer
+	Send(interface{}) (int, error)
+	// CloseConn close connection
+	CloseConn(int)
+	// SetSession sets related session
+	SetSession(Session)
 }
 
 // ///////////////////////////////////////
@@ -104,11 +108,11 @@ func (c *gettyConn) RemoteAddr() string {
 	return c.peer
 }
 
-func (c *gettyConn) incReadPkgNum() {
+func (c *gettyConn) IncReadPkgNum() {
 	c.readPkgNum.Add(1)
 }
 
-func (c *gettyConn) incWritePkgNum() {
+func (c *gettyConn) IncWritePkgNum() {
 	c.writePkgNum.Add(1)
 }
 
@@ -126,11 +130,11 @@ func (c *gettyConn) send(interface{}) (int, error) {
 
 func (c *gettyConn) close(int) {}
 
-func (c gettyConn) readTimeout() time.Duration {
+func (c gettyConn) ReadTimeout() time.Duration {
 	return c.rTimeout.Load()
 }
 
-func (c *gettyConn) setSession(ss Session) {
+func (c *gettyConn) SetSession(ss Session) {
 	c.ss = ss
 }
 
@@ -149,7 +153,7 @@ func (c *gettyConn) SetReadTimeout(rTimeout time.Duration) {
 	}
 }
 
-func (c gettyConn) writeTimeout() time.Duration {
+func (c gettyConn) WriteTimeout() time.Duration {
 	return c.wTimeout.Load()
 }
 
@@ -284,7 +288,7 @@ func (t *gettyTCPConn) recv(p []byte) (int, error) {
 }
 
 // tcp connection write
-func (t *gettyTCPConn) send(pkg interface{}) (int, error) {
+func (t *gettyTCPConn) Send(pkg interface{}) (int, error) {
 	var (
 		err         error
 		currentTime time.Time
@@ -331,7 +335,7 @@ func (t *gettyTCPConn) send(pkg interface{}) (int, error) {
 }
 
 // close tcp connection
-func (t *gettyTCPConn) close(waitSec int) {
+func (t *gettyTCPConn) CloseConn(waitSec int) {
 	// if tcpConn, ok := t.conn.(*net.TCPConn); ok {
 	// tcpConn.SetLinger(0)
 	// }
@@ -432,7 +436,7 @@ func (u *gettyUDPConn) recv(p []byte) (int, *net.UDPAddr, error) {
 }
 
 // write udp packet, @ctx should be of type UDPContext
-func (u *gettyUDPConn) send(udpCtx interface{}) (int, error) {
+func (u *gettyUDPConn) Send(udpCtx interface{}) (int, error) {
 	var (
 		err         error
 		currentTime time.Time
@@ -476,7 +480,7 @@ func (u *gettyUDPConn) send(udpCtx interface{}) (int, error) {
 }
 
 // close udp connection
-func (u *gettyUDPConn) close(_ int) {
+func (u *gettyUDPConn) CloseConn(_ int) {
 	if u.conn != nil {
 		u.conn.Close()
 		u.conn = nil
@@ -490,6 +494,7 @@ func (u *gettyUDPConn) close(_ int) {
 type gettyWSConn struct {
 	gettyConn
 	conn *websocket.Conn
+	lock sync.Mutex
 }
 
 // create websocket connection
@@ -541,7 +546,6 @@ func (w *gettyWSConn) handlePing(message string) error {
 	err := w.writePong([]byte(message))
 	if err == websocket.ErrCloseSent {
 		err = nil
-
 		//	change the error checking from "e.Temporary()" to "e.Timeout()".
 		//  as per https://github.com/golang/go/issues/45729,
 		//  Timeout() correctly captures subset of Temporary() errors that could be retried.
@@ -570,7 +574,7 @@ func (w *gettyWSConn) recv() ([]byte, error) {
 		w.readBytes.Add((uint32)(len(b)))
 	} else {
 		if websocket.IsUnexpectedCloseError(e, websocket.CloseGoingAway) {
-			log.Warnf("websocket unexpected close error: %v", e)
+			log.Warnf("websocket unexpected CloseConn error: %v", e)
 		}
 	}
 
@@ -597,7 +601,7 @@ func (w *gettyWSConn) updateWriteDeadline() error {
 }
 
 // websocket connection write
-func (w *gettyWSConn) send(pkg interface{}) (int, error) {
+func (w *gettyWSConn) Send(pkg interface{}) (int, error) {
 	var (
 		err error
 		ok  bool
@@ -609,7 +613,7 @@ func (w *gettyWSConn) send(pkg interface{}) (int, error) {
 	}
 
 	w.updateWriteDeadline()
-	if err = w.conn.WriteMessage(websocket.BinaryMessage, p); err == nil {
+	if err = w.threadSafeWriteMessage(websocket.BinaryMessage, p); err == nil {
 		w.writeBytes.Add((uint32)(len(p)))
 		w.writePkgNum.Add(1)
 	}
@@ -618,19 +622,18 @@ func (w *gettyWSConn) send(pkg interface{}) (int, error) {
 
 func (w *gettyWSConn) writePing() error {
 	w.updateWriteDeadline()
-	return perrors.WithStack(w.conn.WriteMessage(websocket.PingMessage, []byte{}))
+	return perrors.WithStack(w.threadSafeWriteMessage(websocket.PingMessage, []byte{}))
 }
 
 func (w *gettyWSConn) writePong(message []byte) error {
 	w.updateWriteDeadline()
-	return perrors.WithStack(w.conn.WriteMessage(websocket.PongMessage, message))
+	return perrors.WithStack(w.threadSafeWriteMessage(websocket.PongMessage, message))
 }
 
 // close websocket connection
-func (w *gettyWSConn) close(waitSec int) {
+func (w *gettyWSConn) CloseConn(waitSec int) {
 	w.updateWriteDeadline()
-	bytes := websocket.FormatCloseMessage(websocket.CloseNormalClosure, "bye-bye!!!")
-	w.conn.WriteMessage(websocket.CloseMessage, bytes)
+	w.threadSafeWriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "bye-bye!!!"))
 	conn := w.conn.UnderlyingConn()
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
 		tcpConn.SetLinger(waitSec)
@@ -638,4 +641,14 @@ func (w *gettyWSConn) close(waitSec int) {
 		wsConn.CloseWrite()
 	}
 	w.conn.Close()
+}
+
+// uses a mutex to ensure that only one thread can send a message at a time, preventing race conditions.
+func (w *gettyWSConn) threadSafeWriteMessage(messageType int, data []byte) error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	if err := w.conn.WriteMessage(messageType, data); err != nil {
+		return err
+	}
+	return nil
 }

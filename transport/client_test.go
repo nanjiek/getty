@@ -130,8 +130,8 @@ func TestTCPClient(t *testing.T) {
 
 	assert.Equal(t, 1, msgHandler.SessionNumber())
 	ss := msgHandler.array[0]
-	ss.setSession(ss)
-	_, err = ss.send([]byte("hello"))
+	ss.SetSession(ss)
+	_, err = ss.Send([]byte("hello"))
 	assert.Nil(t, err)
 	active := ss.GetActive()
 	assert.NotNil(t, active)
@@ -198,7 +198,7 @@ func TestTCPClient(t *testing.T) {
 	beforeWritePkgNum.Add(2)
 	assert.Equal(t, beforeWriteBytes, conn.writeBytes)
 	assert.Equal(t, beforeWritePkgNum, conn.writePkgNum)
-	assert.Equal(t, time.Duration(3000000000), ss.readTimeout())
+	assert.Equal(t, time.Duration(3000000000), ss.ReadTimeout())
 	clt.Close()
 	assert.True(t, clt.IsClosed())
 }
@@ -240,8 +240,8 @@ func TestUDPClient(t *testing.T) {
 
 	assert.Equal(t, 1, msgHandler.SessionNumber())
 	ss := msgHandler.array[0]
-	ss.setSession(ss)
-	_, err = ss.send([]byte("hello"))
+	ss.SetSession(ss)
+	_, err = ss.Send([]byte("hello"))
 	assert.NotNil(t, err)
 	active := ss.GetActive()
 	assert.NotNil(t, active)
@@ -341,8 +341,8 @@ func TestNewWSClient(t *testing.T) {
 	l, err := conn.send("hello")
 	assert.NotNil(t, err)
 	assert.True(t, l == 0)
-	ss.setSession(ss)
-	_, err = ss.send([]byte("hello"))
+	ss.SetSession(ss)
+	_, err = ss.Send([]byte("hello"))
 	assert.Nil(t, err)
 	active := ss.GetActive()
 	assert.NotNil(t, active)

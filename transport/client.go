@@ -51,7 +51,8 @@ var (
 	sessionClientKey   = "session-client-owner"
 	connectPingPackage = []byte("connect-ping")
 
-	clientID = EndPointID(0)
+	clientID           = EndPointID(0)
+	ignoreReconnectKey = "ignore-reconnect"
 )
 
 type Client interface {
@@ -185,8 +186,8 @@ func (c *client) dialUDP() Session {
 		buf       []byte
 	)
 
-	bufp = gxbytes.AcquireBytes(128)
-	defer gxbytes.ReleaseBytes(bufp)
+	bufp = gxbytes.GetBytes(128)
+	defer gxbytes.PutBytes(bufp)
 	buf = *bufp
 	localAddr = &net.UDPAddr{IP: net.IPv4zero, Port: 0}
 	peerAddr, _ = net.ResolveUDPAddr("udp", c.addr)
@@ -396,6 +397,7 @@ func (c *client) connect() {
 			c.ssMap[ss] = struct{}{}
 			c.Unlock()
 			ss.SetAttribute(sessionClientKey, c)
+			ss.SetAttribute(ignoreReconnectKey, false)
 			break
 		}
 		// don't distinguish between tcp connection and websocket connection. Because
