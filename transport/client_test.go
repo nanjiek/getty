@@ -26,7 +26,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+)
 
+import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 )
@@ -128,11 +130,11 @@ func TestTCPClient(t *testing.T) {
 
 	assert.Equal(t, 1, msgHandler.SessionNumber())
 	ss := msgHandler.array[0]
-	// ss.SetSession(ss)
-	// _, err = ss.Send([]byte("hello"))
-	// assert.Nil(t, err)
-	// active := ss.GetActive()
-	// assert.NotNil(t, active)
+	ss.SetSession(ss)
+	_, err = ss.Send([]byte("hello"))
+	assert.Nil(t, err)
+	active := ss.GetActive()
+	assert.NotNil(t, active)
 	ss.SetCompressType(CompressNone)
 	conn := ss.(*session).Connection.(*gettyTCPConn)
 	assert.True(t, conn.compress == CompressNone)
@@ -240,11 +242,11 @@ func TestUDPClient(t *testing.T) {
 
 	assert.Equal(t, 1, msgHandler.SessionNumber())
 	ss := msgHandler.array[0]
-	// ss.SetSession(ss)
-	// _, err = ss.Send([]byte("hello"))
-	// assert.NotNil(t, err)
-	// active := ss.GetActive()
-	// assert.NotNil(t, active)
+	ss.SetSession(ss)
+	_, err = ss.Send([]byte("hello"))
+	assert.NotNil(t, err)
+	active := ss.GetActive()
+	assert.NotNil(t, active)
 	totalLen, sendLen, err = ss.WritePkg(nil, 0)
 	assert.NotNil(t, err)
 	assert.True(t, sendLen == 0)
