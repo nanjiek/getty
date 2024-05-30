@@ -20,6 +20,7 @@ package getty
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -52,6 +53,8 @@ const (
 	// MaxWheelTimeSpan 900s, 15 minute
 	MaxWheelTimeSpan = 900e9
 	maxPacketLen     = 16 * 1024
+
+	defaultTLSHandshakeTimeout = time.Second * 3
 
 	defaultSessionName    = "session"
 	defaultTCPSessionName = "tcp-session"
@@ -151,7 +154,7 @@ func newSession(endPoint EndPoint, conn Connection) *session {
 		attrs: gxcontext.NewValuesContext(context.Background()),
 	}
 
-	ss.Connection.setSession(ss)
+	ss.Connection.SetSession(ss)
 	ss.SetWriteTimeout(netIOTimeout)
 	ss.SetReadTimeout(netIOTimeout)
 
@@ -369,7 +372,7 @@ func (s *session) sessionToken() string {
 		s.name, s.EndPoint().EndPointType(), s.ID(), s.LocalAddr(), s.RemoteAddr())
 }
 
-func (s *session) WritePkg(pkg interface{}, timeout time.Duration) (int, int, error) {
+func (s *session) WritePkg(pkg interface{}, timeout time.Duration) (pkgBytesLenth int, successCount int, err error) {
 	if pkg == nil {
 		return 0, 0, fmt.Errorf("@pkg is nil")
 	}
@@ -382,7 +385,8 @@ func (s *session) WritePkg(pkg interface{}, timeout time.Duration) (int, int, er
 			const size = 64 << 10
 			rBuf := make([]byte, size)
 			rBuf = rBuf[:runtime.Stack(rBuf, false)]
-			log.Errorf("[session.WritePkg] panic session %s: err=%s\n%s", s.sessionToken(), r, rBuf)
+			err = perrors.WithStack(fmt.Errorf("[session.WritePkg] panic session %s: err=%v\n%s", s.sessionToken(), r, rBuf))
+			log.Error(err)
 		}
 	}()
 
@@ -408,13 +412,12 @@ func (s *session) WritePkg(pkg interface{}, timeout time.Duration) (int, int, er
 	if 0 < timeout {
 		s.Connection.SetWriteTimeout(timeout)
 	}
-	var succssCount int
-	succssCount, err = s.Connection.send(pkg)
+	successCount, err = s.Connection.Send(pkg)
 	if err != nil {
 		log.Warnf("%s, [session.WritePkg] @s.Connection.Write(pkg:%#v) = err:%+v", s.Stat(), pkg, err)
-		return len(pkgBytes), succssCount, perrors.WithStack(err)
+		return len(pkgBytes), successCount, perrors.WithStack(err)
 	}
-	return len(pkgBytes), succssCount, nil
+	return len(pkgBytes), successCount, nil
 }
 
 // WriteBytes for codecs
@@ -433,7 +436,7 @@ func (s *session) WriteBytes(pkg []byte) (int, error) {
 	}
 
 	for leftPackageSize > maxPacketLen {
-		_, err := s.Connection.send(pkg[writeSize:(writeSize + maxPacketLen)])
+		_, err := s.Connection.Send(pkg[writeSize:(writeSize + maxPacketLen)])
 		if err != nil {
 			return writeSize, perrors.Wrapf(err, "s.Connection.Write(pkg len:%d)", len(pkg))
 		}
@@ -445,7 +448,7 @@ func (s *session) WriteBytes(pkg []byte) (int, error) {
 		return writeSize, nil
 	}
 
-	_, err := s.Connection.send(pkg[writeSize:])
+	_, err := s.Connection.Send(pkg[writeSize:])
 	if err != nil {
 		return writeSize, perrors.Wrapf(err, "s.Connection.Write(pkg len:%d)", len(pkg))
 	}
@@ -466,7 +469,7 @@ func (s *session) WriteBytesArray(pkgs ...[]byte) (int, error) {
 	if _, ok := s.Connection.(*gettyTCPConn); ok {
 		s.packetLock.RLock()
 		defer s.packetLock.RUnlock()
-		lg, err := s.Connection.send(pkgs)
+		lg, err := s.Connection.Send(pkgs)
 		if err != nil {
 			return 0, perrors.Wrapf(err, "s.Connection.Write(pkgs num:%d)", len(pkgs))
 		}
@@ -505,7 +508,7 @@ func (s *session) WriteBytesArray(pkgs ...[]byte) (int, error) {
 
 	num := len(pkgs) - 1
 	for i := 0; i < num; i++ {
-		s.incWritePkgNum()
+		s.IncWritePkgNum()
 	}
 
 	return wlg, nil
@@ -566,8 +569,13 @@ func (s *session) run() {
 
 func (s *session) addTask(pkg interface{}) {
 	f := func() {
+		// If the session is closed, there is no need to perform CPU-intensive operations.
+		if s.IsClosed() {
+			log.Errorf("[Id:%d, name=%s, endpoint=%s] Session is closed", s.ID(), s.name, s.EndPoint())
+			return
+		}
 		s.listener.OnMessage(s, pkg)
-		s.incReadPkgNum()
+		s.IncReadPkgNum()
 	}
 	if taskPool := s.EndPoint().GetTaskPool(); taskPool != nil {
 		taskPool.AddTaskAlways(f)
@@ -635,6 +643,18 @@ func (s *session) handleTCPPackage() error {
 	pktBuf = gxbytes.NewBuffer(nil)
 
 	conn = s.Connection.(*gettyTCPConn)
+	if tlsConn, ok := conn.conn.(*tls.Conn); ok {
+		tlsHandshaketime := defaultTLSHandshakeTimeout
+		if s.ReadTimeout() > 0 {
+			tlsHandshaketime = s.ReadTimeout()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), tlsHandshaketime)
+		defer cancel()
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			log.Errorf("[tlsConn.HandshakeContext] = error:%+v", err)
+			return perrors.Wrap(err, "tlsConn.HandshakeContext")
+		}
+	}
 	for {
 		if s.IsClosed() {
 			err = nil
@@ -655,6 +675,8 @@ func (s *session) handleTCPPackage() error {
 				}
 				if perrors.Cause(err) == io.EOF {
 					log.Infof("%s, session.conn read EOF, client send over, session exit", s.sessionToken())
+					//when read EOF, means that the peer has closed the connection, stop to reconnect to maintain the connection pool.
+					s.SetAttribute(ignoreReconnectKey, true)
 					err = nil
 					exit = true
 					if bufLen != 0 {
@@ -838,12 +860,13 @@ func (s *session) stop() {
 			// let read/Write timeout asap
 			now := time.Now()
 			if conn := s.Conn(); conn != nil {
-				conn.SetReadDeadline(now.Add(s.readTimeout()))
-				conn.SetWriteDeadline(now.Add(s.writeTimeout()))
+				conn.SetReadDeadline(now.Add(s.ReadTimeout()))
+				conn.SetWriteDeadline(now.Add(s.WriteTimeout()))
 			}
 			close(s.done)
-			c := s.GetAttribute(sessionClientKey)
-			if clt, ok := c.(*client); ok {
+			clt, cltFound := s.GetAttribute(sessionClientKey).(*client)
+			ignoreReconnect, flagFound := s.GetAttribute(ignoreReconnectKey).(bool)
+			if cltFound && flagFound && !ignoreReconnect {
 				clt.reConnect()
 			}
 		})
@@ -863,7 +886,7 @@ func (s *session) gc() {
 
 	go func() {
 		if conn != nil {
-			conn.close(int(s.wait))
+			conn.CloseConn(int(s.wait))
 		}
 	}()
 }
@@ -937,59 +960,59 @@ func (s *session) RemoteAddr() string {
 	return ""
 }
 
-func (s *session) incReadPkgNum() {
+func (s *session) IncReadPkgNum() {
 	if s == nil {
 		return
 	}
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	if s.Connection != nil {
-		s.Connection.incReadPkgNum()
+		s.Connection.IncReadPkgNum()
 	}
 }
 
-func (s *session) incWritePkgNum() {
+func (s *session) IncWritePkgNum() {
 	if s == nil {
 		return
 	}
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	if s.Connection != nil {
-		s.Connection.incWritePkgNum()
+		s.Connection.IncWritePkgNum()
 	}
 }
 
-func (s *session) send(pkg interface{}) (int, error) {
+func (s *session) Send(pkg interface{}) (int, error) {
 	if s == nil {
 		return 0, nil
 	}
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	if s.Connection != nil {
-		return s.Connection.send(pkg)
+		return s.Connection.Send(pkg)
 	}
 	return 0, nil
 }
 
-func (s *session) readTimeout() time.Duration {
+func (s *session) ReadTimeout() time.Duration {
 	if s == nil {
 		return time.Duration(0)
 	}
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	if s.Connection != nil {
-		return s.Connection.readTimeout()
+		return s.Connection.ReadTimeout()
 	}
 	return time.Duration(0)
 }
 
-func (s *session) setSession(ss Session) {
+func (s *session) SetSession(ss Session) {
 	if s == nil {
 		return
 	}
 	s.lock.RLock()
 	if s.Connection != nil {
-		s.Connection.setSession(ss)
+		s.Connection.SetSession(ss)
 	}
 	s.lock.RUnlock()
 }
