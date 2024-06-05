@@ -644,7 +644,7 @@ func (w *gettyWSConn) CloseConn(waitSec int) {
 	w.conn.Close()
 }
 
-// uses a mutex to ensure that only one thread can send a message at a time, preventing race conditions.
+// uses a mutex(writeLock) to ensure that only one thread can send a message at a time, preventing race conditions.
 func (w *gettyWSConn) threadSafeWriteMessage(messageType int, data []byte) error {
 	w.writeLock.Lock()
 	defer w.writeLock.Unlock()
@@ -654,7 +654,7 @@ func (w *gettyWSConn) threadSafeWriteMessage(messageType int, data []byte) error
 	return nil
 }
 
-// uses a mutex to ensure that only one thread can read a message at a time, preventing race conditions.
+// uses a mutex(readLock) to ensure that only one thread can read a message at a time, preventing race conditions.
 func (w *gettyWSConn) threadSafeReadMessage() (int, []byte, error) {
 	w.readLock.Lock()
 	defer w.readLock.Unlock()
