@@ -41,10 +41,10 @@ import (
 )
 
 const (
-	reconnectInterval = 3e8 // 300ms
-	connectInterval   = 5e8 // 500ms
-	connectTimeout    = 3e9
-	maxTimes          = 10
+	defaultReconnectInterval    = 3e8 // 300ms
+	connectInterval             = 5e8 // 500ms
+	connectTimeout              = 3e9
+	defaultMaxReconnectAttempts = 10
 )
 
 var (
@@ -423,13 +423,13 @@ func (c *client) RunEventLoop(newSession NewSessionCallback) {
 // a for-loop connect to make sure the connection pool is valid
 func (c *client) reConnect() {
 	var (
-		num, max, times, interval int
-		maxDuration               int64
+		sessionNum, maxReconnectAttempts, reconnectAttempts, reconnectInterval int
+		maxReconnectInterval                                                   int64
 	)
-	max = c.number
-	interval = c.reconnectInterval
-	if interval == 0 {
-		interval = reconnectInterval
+	maxReconnectAttempts = c.number
+	reconnectInterval = c.reconnectInterval
+	if reconnectInterval == 0 {
+		reconnectInterval = defaultReconnectInterval
 	}
 	for {
 		if c.IsClosed() {
@@ -437,19 +437,19 @@ func (c *client) reConnect() {
 			break
 		}
 
-		num = c.sessionNum()
-		if max <= num || max < times {
+		sessionNum = c.sessionNum()
+		if maxReconnectAttempts <= sessionNum || maxReconnectAttempts < reconnectAttempts {
 			//Exit when the number of connection pools is sufficient or the reconnection times exceeds the connections numbers.
 			break
 		}
 		c.connect()
-		times++
-		if times > maxTimes {
-			maxDuration = int64(maxTimes) * int64(interval)
+		reconnectAttempts++
+		if reconnectAttempts > defaultMaxReconnectAttempts {
+			maxReconnectInterval = int64(defaultMaxReconnectAttempts) * int64(reconnectInterval)
 		} else {
-			maxDuration = int64(times) * int64(interval)
+			maxReconnectInterval = int64(reconnectAttempts) * int64(reconnectInterval)
 		}
-		<-gxtime.After(time.Duration(maxDuration))
+		<-gxtime.After(time.Duration(maxReconnectInterval))
 	}
 }
 
