@@ -439,7 +439,7 @@ func (c *client) reConnect() {
 
 		sessionNum = c.sessionNum()
 		if maxReconnectAttempts <= sessionNum || maxReconnectAttempts < reconnectAttempts {
-			//Exit when the number of connection pools is sufficient or the reconnection times exceeds the connections numbers.
+			//exit reconnect when the number of connection pools is sufficient or the current reconnection attempts exceeds the max reconnection attempts.
 			break
 		}
 		c.connect()
