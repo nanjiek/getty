@@ -44,7 +44,8 @@ const (
 	defaultReconnectInterval    = 3e8 // 300ms
 	connectInterval             = 5e8 // 500ms
 	connectTimeout              = 3e9
-	defaultMaxReconnectAttempts = 10
+	defaultMaxReconnectAttempts = 100
+	maxBackOffTimes             = 10
 )
 
 var (
@@ -423,14 +424,18 @@ func (c *client) RunEventLoop(newSession NewSessionCallback) {
 // a for-loop connect to make sure the connection pool is valid
 func (c *client) reConnect() {
 	var (
-		sessionNum, maxReconnectAttempts, reconnectAttempts, reconnectInterval int
-		maxReconnectInterval                                                   int64
+		sessionNum, maxReconnectAttempts, reconnectAttempts, reconnectInterval, connectionPoolSize int
+		maxReconnectInterval                                                                       int64
 	)
-	maxReconnectAttempts = c.number
 	reconnectInterval = c.reconnectInterval
 	if reconnectInterval == 0 {
 		reconnectInterval = defaultReconnectInterval
 	}
+	maxReconnectAttempts = c.maxReconnectAttempts
+	if maxReconnectAttempts == 0 {
+		maxReconnectAttempts = defaultMaxReconnectAttempts
+	}
+	connectionPoolSize = c.number
 	for {
 		if c.IsClosed() {
 			log.Warnf("client{peer:%s} goroutine exit now.", c.addr)
@@ -438,14 +443,14 @@ func (c *client) reConnect() {
 		}
 
 		sessionNum = c.sessionNum()
-		if maxReconnectAttempts <= sessionNum || maxReconnectAttempts < reconnectAttempts {
+		if connectionPoolSize <= sessionNum || maxReconnectAttempts < reconnectAttempts {
 			//exit reconnect when the number of connection pools is sufficient or the current reconnection attempts exceeds the max reconnection attempts.
 			break
 		}
 		c.connect()
 		reconnectAttempts++
-		if reconnectAttempts > defaultMaxReconnectAttempts {
-			maxReconnectInterval = int64(defaultMaxReconnectAttempts) * int64(reconnectInterval)
+		if reconnectAttempts > maxBackOffTimes {
+			maxReconnectInterval = int64(maxBackOffTimes) * int64(reconnectInterval)
 		} else {
 			maxReconnectInterval = int64(reconnectAttempts) * int64(reconnectInterval)
 		}
