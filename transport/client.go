@@ -44,7 +44,7 @@ const (
 	defaultReconnectInterval    = 3e8 // 300ms
 	connectInterval             = 5e8 // 500ms
 	connectTimeout              = 3e9
-	defaultMaxReconnectAttempts = 100
+	defaultMaxReconnectAttempts = 50
 	maxBackOffTimes             = 10
 )
 
@@ -424,18 +424,18 @@ func (c *client) RunEventLoop(newSession NewSessionCallback) {
 // a for-loop connect to make sure the connection pool is valid
 func (c *client) reConnect() {
 	var (
-		sessionNum, maxReconnectAttempts, reconnectAttempts, reconnectInterval, connectionPoolSize int
-		maxReconnectInterval                                                                       int64
+		sessionNum, reconnectAttempts int
+		maxReconnectInterval          int64
 	)
-	reconnectInterval = c.reconnectInterval
+	reconnectInterval := c.reconnectInterval
 	if reconnectInterval == 0 {
 		reconnectInterval = defaultReconnectInterval
 	}
-	maxReconnectAttempts = c.maxReconnectAttempts
+	maxReconnectAttempts := c.maxReconnectAttempts
 	if maxReconnectAttempts == 0 {
 		maxReconnectAttempts = defaultMaxReconnectAttempts
 	}
-	connectionPoolSize = c.number
+	connPoolSize := c.number
 	for {
 		if c.IsClosed() {
 			log.Warnf("client{peer:%s} goroutine exit now.", c.addr)
@@ -443,7 +443,7 @@ func (c *client) reConnect() {
 		}
 
 		sessionNum = c.sessionNum()
-		if connectionPoolSize <= sessionNum || maxReconnectAttempts < reconnectAttempts {
+		if connPoolSize <= sessionNum || maxReconnectAttempts < reconnectAttempts {
 			//exit reconnect when the number of connection pools is sufficient or the current reconnection attempts exceeds the max reconnection attempts.
 			break
 		}
