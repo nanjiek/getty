@@ -58,7 +58,7 @@ type (
 		waitTimeout             time.Duration
 		MaxMsgLen               int    `default:"1024" yaml:"max_msg_len" json:"max_msg_len,omitempty"`
 		SessionName             string `default:"echo-client" yaml:"session_name" json:"session_name,omitempty"`
-		TcpMaxReconnectAttempts int    `default:"10" yaml:"tcp_max_retry_attempts" json:"tcp_max_retry_attempts,omitempty"`
+		TcpMaxReconnectAttempts int    `default:"10" yaml:"tcp_max_reconnect_attempts" json:"tcp_max_reconnect_attempts,omitempty"`
 	}
 
 	// Config holds supported types by the multiconfig package
