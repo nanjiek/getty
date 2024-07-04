@@ -22,6 +22,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -208,14 +209,18 @@ func (c *client) dialUDP() Session {
 		}
 
 		// check connection alive by write/read action
-		conn.SetWriteDeadline(time.Now().Add(1e9))
+		if err := conn.SetWriteDeadline(time.Now().Add(1e9)); err != nil {
+			log.Warnf("failed to set write deadline: %+v", err)
+		}
 		if length, err = conn.Write(connectPingPackage[:]); err != nil {
 			conn.Close()
 			log.Warnf("conn.Write(%s) = {length:%d, err:%+v}", string(connectPingPackage), length, perrors.WithStack(err))
 			<-gxtime.After(connectInterval)
 			continue
 		}
-		conn.SetReadDeadline(time.Now().Add(1e9))
+		if err := conn.SetReadDeadline(time.Now().Add(1e9)); err != nil {
+			log.Warnf("failed to set read deadline: %+v", err)
+		}
 		length, err = conn.Read(buf)
 		if netErr, ok := perrors.Cause(err).(net.Error); ok && netErr.Timeout() {
 			err = nil
@@ -449,11 +454,7 @@ func (c *client) reConnect() {
 		}
 		c.connect()
 		reconnectAttempts++
-		if reconnectAttempts > maxBackOffTimes {
-			maxReconnectInterval = int64(maxBackOffTimes) * int64(reconnectInterval)
-		} else {
-			maxReconnectInterval = int64(reconnectAttempts) * int64(reconnectInterval)
-		}
+		maxReconnectInterval = int64(math.Min(float64(reconnectAttempts), float64(maxBackOffTimes))) * int64(reconnectInterval)
 		<-gxtime.After(time.Duration(maxReconnectInterval))
 	}
 }
