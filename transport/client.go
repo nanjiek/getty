@@ -22,6 +22,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"strings"
@@ -41,10 +42,11 @@ import (
 )
 
 const (
-	reconnectInterval = 3e8 // 300ms
-	connectInterval   = 5e8 // 500ms
-	connectTimeout    = 3e9
-	maxTimes          = 10
+	defaultReconnectInterval    = 3e8 // 300ms
+	connectInterval             = 5e8 // 500ms
+	connectTimeout              = 3e9
+	defaultMaxReconnectAttempts = 50
+	maxBackOffTimes             = 10
 )
 
 var (
@@ -207,14 +209,18 @@ func (c *client) dialUDP() Session {
 		}
 
 		// check connection alive by write/read action
-		conn.SetWriteDeadline(time.Now().Add(1e9))
+		if err := conn.SetWriteDeadline(time.Now().Add(1e9)); err != nil {
+			log.Warnf("failed to set write deadline: %+v", err)
+		}
 		if length, err = conn.Write(connectPingPackage[:]); err != nil {
 			conn.Close()
 			log.Warnf("conn.Write(%s) = {length:%d, err:%+v}", string(connectPingPackage), length, perrors.WithStack(err))
 			<-gxtime.After(connectInterval)
 			continue
 		}
-		conn.SetReadDeadline(time.Now().Add(1e9))
+		if err := conn.SetReadDeadline(time.Now().Add(1e9)); err != nil {
+			log.Warnf("failed to set read deadline: %+v", err)
+		}
 		length, err = conn.Read(buf)
 		if netErr, ok := perrors.Cause(err).(net.Error); ok && netErr.Timeout() {
 			err = nil
@@ -423,33 +429,33 @@ func (c *client) RunEventLoop(newSession NewSessionCallback) {
 // a for-loop connect to make sure the connection pool is valid
 func (c *client) reConnect() {
 	var (
-		num, max, times, interval int
-		maxDuration               int64
+		sessionNum, reconnectAttempts int
+		maxReconnectInterval          int64
 	)
-	max = c.number
-	interval = c.reconnectInterval
-	if interval == 0 {
-		interval = reconnectInterval
+	reconnectInterval := c.reconnectInterval
+	if reconnectInterval == 0 {
+		reconnectInterval = defaultReconnectInterval
 	}
+	maxReconnectAttempts := c.maxReconnectAttempts
+	if maxReconnectAttempts == 0 {
+		maxReconnectAttempts = defaultMaxReconnectAttempts
+	}
+	connPoolSize := c.number
 	for {
 		if c.IsClosed() {
 			log.Warnf("client{peer:%s} goroutine exit now.", c.addr)
 			break
 		}
 
-		num = c.sessionNum()
-		if max <= num || max < times {
-			//Exit when the number of connection pools is sufficient or the reconnection times exceeds the connections numbers.
+		sessionNum = c.sessionNum()
+		if connPoolSize <= sessionNum || maxReconnectAttempts < reconnectAttempts {
+			//exit reconnect when the number of connection pools is sufficient or the current reconnection attempts exceeds the max reconnection attempts.
 			break
 		}
 		c.connect()
-		times++
-		if times > maxTimes {
-			maxDuration = int64(maxTimes) * int64(interval)
-		} else {
-			maxDuration = int64(times) * int64(interval)
-		}
-		<-gxtime.After(time.Duration(maxDuration))
+		reconnectAttempts++
+		maxReconnectInterval = int64(math.Min(float64(reconnectAttempts), float64(maxBackOffTimes))) * int64(reconnectInterval)
+		<-gxtime.After(time.Duration(maxReconnectInterval))
 	}
 }
 
