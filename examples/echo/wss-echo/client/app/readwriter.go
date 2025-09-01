@@ -36,7 +36,7 @@ func NewEchoPackageHandler() *EchoPackageHandler {
 	return &EchoPackageHandler{}
 }
 
-func (h *EchoPackageHandler) Read(ss getty.Session, data []byte) (interface{}, int, error) {
+func (h *EchoPackageHandler) Read(ss getty.Session, data []byte) (any, int, error) {
 	var (
 		err error
 		len int
@@ -57,7 +57,7 @@ func (h *EchoPackageHandler) Read(ss getty.Session, data []byte) (interface{}, i
 	return &pkg, len, nil
 }
 
-func (h *EchoPackageHandler) Write(ss getty.Session, pkg interface{}) ([]byte, error) {
+func (h *EchoPackageHandler) Write(ss getty.Session, pkg any) ([]byte, error) {
 	var (
 		ok        bool
 		err       error

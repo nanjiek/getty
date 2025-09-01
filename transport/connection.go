@@ -66,7 +66,7 @@ type Connection interface {
 	// SetWriteTimeout sets deadline for the future write calls.
 	SetWriteTimeout(time.Duration)
 	// Send pkg data to peer
-	Send(interface{}) (int, error)
+	Send(any) (int, error)
 	// CloseConn close connection
 	CloseConn(int)
 	// SetSession sets related session
@@ -124,7 +124,7 @@ func (c *gettyConn) GetActive() time.Time {
 	return launchTime.Add(time.Duration(c.active.Load()))
 }
 
-func (c *gettyConn) send(interface{}) (int, error) {
+func (c *gettyConn) send(any) (int, error) {
 	return 0, nil
 }
 
@@ -288,7 +288,7 @@ func (t *gettyTCPConn) recv(p []byte) (int, error) {
 }
 
 // tcp connection write
-func (t *gettyTCPConn) Send(pkg interface{}) (int, error) {
+func (t *gettyTCPConn) Send(pkg any) (int, error) {
 	var (
 		err         error
 		currentTime time.Time
@@ -361,7 +361,7 @@ func (t *gettyTCPConn) CloseConn(waitSec int) {
 // ///////////////////////////////////////
 
 type UDPContext struct {
-	Pkg      interface{}
+	Pkg      any
 	PeerAddr *net.UDPAddr
 }
 
@@ -436,7 +436,7 @@ func (u *gettyUDPConn) recv(p []byte) (int, *net.UDPAddr, error) {
 }
 
 // write udp packet, @ctx should be of type UDPContext
-func (u *gettyUDPConn) Send(udpCtx interface{}) (int, error) {
+func (u *gettyUDPConn) Send(udpCtx any) (int, error) {
 	var (
 		err         error
 		currentTime time.Time
@@ -602,7 +602,7 @@ func (w *gettyWSConn) updateWriteDeadline() error {
 }
 
 // websocket connection write
-func (w *gettyWSConn) Send(pkg interface{}) (int, error) {
+func (w *gettyWSConn) Send(pkg any) (int, error) {
 	var (
 		err error
 		ok  bool

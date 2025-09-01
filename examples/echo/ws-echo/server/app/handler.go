@@ -107,7 +107,7 @@ func (h *EchoMessageHandler) OnClose(session getty.Session) {
 	h.rwlock.Unlock()
 }
 
-func (h *EchoMessageHandler) OnMessage(session getty.Session, pkg interface{}) {
+func (h *EchoMessageHandler) OnMessage(session getty.Session, pkg any) {
 	p, ok := pkg.(*EchoPackage)
 	if !ok {
 		log.Error("illegal packge{%#v}, %s", pkg, string(pkg.([]byte)))

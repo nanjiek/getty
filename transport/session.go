@@ -88,16 +88,16 @@ type Session interface {
 	SetWriter(Writer)
 	SetCronPeriod(int)
 	SetWaitTime(time.Duration)
-	GetAttribute(interface{}) interface{}
-	SetAttribute(interface{}, interface{})
-	RemoveAttribute(interface{})
+	GetAttribute(any) any
+	SetAttribute(any, any)
+	RemoveAttribute(any)
 
 	// WritePkg the Writer will invoke this function. Pls attention that if timeout is less than 0, WritePkg will send @pkg asap.
 	// for udp session, the first parameter should be UDPContext.
 	// totalBytesLength: @pkg stream bytes length after encoding @pkg.
 	// sendBytesLength: stream bytes length that sent out successfully.
 	// err: maybe it has illegal data, encoding error, or write out system error.
-	WritePkg(pkg interface{}, timeout time.Duration) (totalBytesLength int, sendBytesLength int, err error)
+	WritePkg(pkg any, timeout time.Duration) (totalBytesLength int, sendBytesLength int, err error)
 	WriteBytes([]byte) (int, error)
 	WriteBytesArray(...[]byte) (int, error)
 	Close()
@@ -329,7 +329,7 @@ func (s *session) SetWaitTime(waitTime time.Duration) {
 }
 
 // GetAttribute get attribute of key @session:key
-func (s *session) GetAttribute(key interface{}) interface{} {
+func (s *session) GetAttribute(key any) any {
 	s.lock.RLock()
 	if s.attrs == nil {
 		s.lock.RUnlock()
@@ -346,7 +346,7 @@ func (s *session) GetAttribute(key interface{}) interface{} {
 }
 
 // SetAttribute set attribute of key @session:key
-func (s *session) SetAttribute(key interface{}, value interface{}) {
+func (s *session) SetAttribute(key any, value any) {
 	s.lock.Lock()
 	if s.attrs != nil {
 		s.attrs.Set(key, value)
@@ -355,7 +355,7 @@ func (s *session) SetAttribute(key interface{}, value interface{}) {
 }
 
 // RemoveAttribute remove attribute of key @session:key
-func (s *session) RemoveAttribute(key interface{}) {
+func (s *session) RemoveAttribute(key any) {
 	s.lock.Lock()
 	if s.attrs != nil {
 		s.attrs.Delete(key)
@@ -372,7 +372,7 @@ func (s *session) sessionToken() string {
 		s.name, s.EndPoint().EndPointType(), s.ID(), s.LocalAddr(), s.RemoteAddr())
 }
 
-func (s *session) WritePkg(pkg interface{}, timeout time.Duration) (pkgBytesLenth int, successCount int, err error) {
+func (s *session) WritePkg(pkg any, timeout time.Duration) (pkgBytesLenth int, successCount int, err error) {
 	if pkg == nil {
 		return 0, 0, fmt.Errorf("@pkg is nil")
 	}
@@ -514,7 +514,7 @@ func (s *session) WriteBytesArray(pkgs ...[]byte) (int, error) {
 	return wlg, nil
 }
 
-func heartbeat(_ gxtime.TimerID, _ time.Time, arg interface{}) error {
+func heartbeat(_ gxtime.TimerID, _ time.Time, arg any) error {
 	ss, _ := arg.(*session)
 	if ss == nil || ss.IsClosed() {
 		return ErrSessionClosed
@@ -567,7 +567,7 @@ func (s *session) run() {
 	go s.handlePackage()
 }
 
-func (s *session) addTask(pkg interface{}) {
+func (s *session) addTask(pkg any) {
 	f := func() {
 		// If the session is closed, there is no need to perform CPU-intensive operations.
 		if s.IsClosed() {
@@ -637,7 +637,7 @@ func (s *session) handleTCPPackage() error {
 		pkgLen   int
 		buf      []byte
 		pktBuf   *gxbytes.Buffer
-		pkg      interface{}
+		pkg      any
 	)
 
 	pktBuf = gxbytes.NewBuffer(nil)
@@ -743,7 +743,7 @@ func (s *session) handleUDPPackage() error {
 		buf       []byte
 		addr      *net.UDPAddr
 		pkgLen    int
-		pkg       interface{}
+		pkg       any
 	)
 
 	conn = s.Connection.(*gettyUDPConn)
@@ -812,7 +812,7 @@ func (s *session) handleWSPackage() error {
 		length       int
 		conn         *gettyWSConn
 		pkg          []byte
-		unmarshalPkg interface{}
+		unmarshalPkg any
 	)
 
 	conn = s.Connection.(*gettyWSConn)
@@ -986,7 +986,7 @@ func (s *session) IncWritePkgNum() {
 	}
 }
 
-func (s *session) Send(pkg interface{}) (int, error) {
+func (s *session) Send(pkg any) (int, error) {
 	if s == nil {
 		return 0, nil
 	}

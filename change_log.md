@@ -14,6 +14,11 @@
 ## develop history ##
 ---
 
+- 2025/09/01
+    > Improvement
+    * upgrade the go version to v1.25 in go.mod
+    * using any instead of interface{} throughout the codebase
+
 - 2020/01/11
     > Feature
     * Imp: enlarge time wheel span from 2 mimutes to 15 minutes

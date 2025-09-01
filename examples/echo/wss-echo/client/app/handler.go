@@ -63,7 +63,7 @@ func (h *EchoMessageHandler) OnClose(session getty.Session) {
 	client.removeSession(session)
 }
 
-func (h *EchoMessageHandler) OnMessage(session getty.Session, pkg interface{}) {
+func (h *EchoMessageHandler) OnMessage(session getty.Session, pkg any) {
 	p, ok := pkg.(*EchoPackage)
 	if !ok {
 		log.Error("illegal packge{%#v}", pkg)

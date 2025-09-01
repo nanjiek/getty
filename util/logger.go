@@ -24,14 +24,14 @@ import (
 
 // Logger for user who want to customize logger of getty
 type Logger interface {
-	Info(args ...interface{})
-	Warn(args ...interface{})
-	Error(args ...interface{})
-	Debug(args ...interface{})
-	Infof(fmt string, args ...interface{})
-	Warnf(fmt string, args ...interface{})
-	Errorf(fmt string, args ...interface{})
-	Debugf(fmt string, args ...interface{})
+	Info(args ...any)
+	Warn(args ...any)
+	Error(args ...any)
+	Debug(args ...any)
+	Infof(fmt string, args ...any)
+	Warnf(fmt string, args ...any)
+	Errorf(fmt string, args ...any)
+	Debugf(fmt string, args ...any)
 }
 
 type LoggerLevel int8
@@ -133,41 +133,41 @@ func SetLoggerCallerDisable() error {
 }
 
 // Debug
-func Debug(args ...interface{}) {
+func Debug(args ...any) {
 	log.Debug(args...)
 }
 
 // Debugf
-func Debugf(template string, args ...interface{}) {
+func Debugf(template string, args ...any) {
 	log.Debugf(template, args...)
 }
 
 // Info
-func Info(args ...interface{}) {
+func Info(args ...any) {
 	log.Info(args...)
 }
 
 // Infof
-func Infof(template string, args ...interface{}) {
+func Infof(template string, args ...any) {
 	log.Infof(template, args...)
 }
 
 // Warn
-func Warn(args ...interface{}) {
+func Warn(args ...any) {
 	log.Warn(args...)
 }
 
 // Warnf
-func Warnf(template string, args ...interface{}) {
+func Warnf(template string, args ...any) {
 	log.Warnf(template, args...)
 }
 
 // Error
-func Error(args ...interface{}) {
+func Error(args ...any) {
 	log.Error(args...)
 }
 
 // Errorf
-func Errorf(template string, args ...interface{}) {
+func Errorf(template string, args ...any) {
 	log.Errorf(template, args...)
 }
