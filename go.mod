@@ -1,6 +1,6 @@
 module github.com/AlexStocks/getty
 
-go 1.20
+go 1.25
 
 require (
 	github.com/AlexStocks/goext v0.3.2

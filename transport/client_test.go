@@ -35,11 +35,11 @@ import (
 
 type PackageHandler struct{}
 
-func (h *PackageHandler) Read(ss Session, data []byte) (interface{}, int, error) {
+func (h *PackageHandler) Read(ss Session, data []byte) (any, int, error) {
 	return nil, 0, nil
 }
 
-func (h *PackageHandler) Write(ss Session, pkg interface{}) ([]byte, error) {
+func (h *PackageHandler) Write(ss Session, pkg any) ([]byte, error) {
 	return nil, nil
 }
 
@@ -69,7 +69,7 @@ func (h *MessageHandler) OnOpen(session Session) error {
 }
 func (h *MessageHandler) OnError(session Session, err error)         {}
 func (h *MessageHandler) OnClose(session Session)                    {}
-func (h *MessageHandler) OnMessage(session Session, pkg interface{}) {}
+func (h *MessageHandler) OnMessage(session Session, pkg any) {}
 func (h *MessageHandler) OnCron(session Session)                     {}
 
 type Package struct{}
